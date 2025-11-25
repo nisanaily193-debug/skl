@@ -1,0 +1,256 @@
+import streamlit as st
+import math
+
+# --- Fungsi Dasar Aritmatika Modular ---
+
+# 1. Algoritma Euclidean untuk mencari GCD
+def extended_gcd(a, b):
+    # Base case: jika a = 0
+    if a == 0:
+        return b, 0, 1
+    # Rekursi
+    g, x1, y1 = extended_gcd(b % a, a)
+    # Update x dan y menggunakan hasil rekursi
+    x = y1 - (b // a) * x1
+    y = x1
+    return g, x, y
+
+# 2. Fungsi untuk menyelesaikan kongruensi tunggal ax = b (mod m)
+def solve_single_congruence(a, b, m):
+    a = a % m
+    b = b % m
+    
+    # Hitung GCD(a, m)
+    g, x_g, y_g = extended_gcd(a, m)
+    
+    # Langkah 1: Cek Solusi
+    if b % g != 0:
+        return "TIDAK ADA SOLUSI", g, None, None # Tidak ada solusi
+    
+    # Langkah 2: Kongruensi Ekuivalen (bagi dengan g)
+    a_prime = a // g
+    b_prime = b // g
+    m_prime = m // g
+    
+    # Langkah 3: Solusi Unik (mod m')
+    # Cari invers a' mod m'
+    # extended_gcd(a_prime, m_prime) akan menghasilkan g=1 dan x_g adalah invers dari a' mod m'
+    g_prime, inv_a_prime, _ = extended_gcd(a_prime, m_prime)
+    
+    # Pastikan invers positif
+    inv_a_prime = inv_a_prime % m_prime
+
+    # Solusi tunggal mod m'
+    x0_prime = (b_prime * inv_a_prime) % m_prime
+    
+    # Langkah 4: Solusi Umum (mod m)
+    # x = x0_prime + k * m_prime (mod m)
+    
+    return "SOLUSI DITEMUKAN", g, x0_prime, m_prime
+
+
+# 3. Fungsi utama penyelesaian sistem kongruensi linier (Chinese Remainder Theorem/CRT)
+def solve_system_crt(congruences):
+    """
+    Sistem: x = a_i (mod m_i)
+    congruences adalah list of tuples: [(a1, m1), (a2, m2), ...]
+    """
+    
+    steps = []
+    
+    # Tahap 1: Cek Kondisi CRT (moduli harus relatif prima/coprime)
+    moduli = [m for a, m in congruences]
+    is_crt_applicable = True
+    for i in range(len(moduli)):
+        for j in range(i + 1, len(moduli)):
+            if math.gcd(moduli[i], moduli[j]) != 1:
+                is_crt_applicable = False
+                steps.append(f"❌ **Gagal Cek CRT**: Moduli ${moduli[i]}$ dan ${moduli[j]}$ tidak relatif prima karena $\\text{GCD}({moduli[i]}, {moduli[j]}) = {math.gcd(moduli[i], moduli[j])}$. Solusi mungkin tidak ada atau Teorema Sisa China tidak dapat diterapkan secara langsung.")
+                return None, False, steps # Mengembalikan None jika CRT tidak berlaku
+    
+    if is_crt_applicable and len(congruences) > 1:
+        steps.append("✅ **Cek CRT Sukses**: Semua moduli relatif prima. Teorema Sisa China dapat diterapkan.")
+    
+    # Tahap 2: Penyelesaian Iteratif
+    
+    # Inisialisasi: x = a1 (mod m1)
+    current_x = congruences[0][0]
+    current_m = congruences[0][1]
+    
+    steps.append(f"**Iterasi Awal**: Solusi sementara adalah $x \\equiv {current_x} \\pmod{{{current_m}}}$.")
+    
+    for i in range(1, len(congruences)):
+        a2, m2 = congruences[i]
+        
+        # Persamaan yang harus diselesaikan: current_x + k * current_m = a2 (mod m2)
+        # Ekuivalen dengan: k * current_m = a2 - current_x (mod m2)
+        A = current_m
+        B = a2 - current_x
+        M = m2
+        
+        B = B % M # Pastikan B dalam range [0, M-1]
+        
+        steps.append(f"--- **Iterasi {i+1}** ---")
+        steps.append(f"Menggabungkan $x \\equiv {current_x} \\pmod{{{current_m}}}$ dengan $x \\equiv {a2} \\pmod{{{m2}}}$.")
+        steps.append(f"Dapat ditulis sebagai $x = {current_x} + k \\cdot {current_m}$.")
+        steps.append(f"Substitusi ke kongruensi kedua: ${current_x} + k \\cdot {current_m} \\equiv {a2} \\pmod{{{m2}}}$.")
+        steps.append(f"Disederhanakan menjadi: $k \\cdot {A} \\equiv {B} \\pmod{{{M}}}$.")
+        
+        # Selesaikan kongruensi linier tunggal untuk k
+        status, g, k0_prime, m_prime = solve_single_congruence(A, B, M)
+        
+        if status == "TIDAK ADA SOLUSI":
+            steps.append(f"❌ **Gagal**: Kongruensi $k \\cdot {A} \\equiv {B} \\pmod{{{M}}}$ tidak memiliki solusi (karena $\\text{GCD}({A}, {M}) = {g}$ dan ${B}$ tidak habis dibagi ${g}$).")
+            return None, False, steps
+        
+        # Solusi untuk k: k = k0_prime (mod m_prime)
+        steps.append(f"✅ **Solusi k**: $k \\equiv {k0_prime} \\pmod{{{m_prime}}}$.")
+        steps.append(f"Ini berarti $k = {k0_prime} + t \\cdot {m_prime}$ untuk suatu bilangan bulat $t$.")
+        
+        # Solusi baru untuk x
+        # x = current_x + k * current_m
+        # x = current_x + (k0_prime + t * m_prime) * current_m
+        # x = (current_x + k0_prime * current_m) + t * (m_prime * current_m)
+        
+        new_x = current_x + k0_prime * current_m
+        new_m = m_prime * current_m
+        
+        # Update
+        current_x = new_x % new_m
+        current_m = new_m
+        
+        steps.append(f"**Solusi Gabungan Sementara**: $x \\equiv {new_x} \\pmod{{{new_m}}}$")
+        steps.append(f"Dengan mengambil residu terkecil: $x \\equiv {current_x} \\pmod{{{current_m}}}$.")
+        
+    steps.append("--- **Penyelesaian Akhir** ---")
+    
+    if len(congruences) == 1:
+        # Jika hanya ada 1 kongruensi, hasilnya adalah kongruensi itu sendiri
+        final_solution_x = congruences[0][0] % congruences[0][1]
+        final_solution_m = congruences[0][1]
+    else:
+        # Hasil dari iterasi terakhir
+        final_solution_x = current_x
+        final_solution_m = current_m
+        
+    return final_solution_x, final_solution_m, steps
+
+
+# --- STREAMLIT UI ---
+
+st.set_page_config(
+    page_title="🔬 Virtual Lab Sistem Kongruensi Linier (CRT)",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("🔬 Virtual Lab: Sistem Kongruensi Linier")
+st.markdown("Aplikasi interaktif untuk menyelesaikan sistem kongruensi linier menggunakan Teorema Sisa China (Chinese Remainder Theorem/CRT).")
+
+st.sidebar.header("Input Sistem Kongruensi")
+st.sidebar.markdown(
+    """
+    Masukkan setiap kongruensi dalam bentuk:
+    $$\\mathbf{x \\equiv a \\pmod{m}}$$
+    
+    Contoh:
+    * `a=2`, `m=3`
+    * `a=3`, `m=5`
+    * `a=2`, `m=7`
+    """
+)
+st.sidebar.divider()
+
+# Input dinamis
+if 'num_congruences' not in st.session_state:
+    st.session_state.num_congruences = 2
+
+# Tombol untuk menambah/mengurangi jumlah kongruensi
+col_btn1, col_btn2 = st.sidebar.columns(2)
+with col_btn1:
+    if st.button("➕ Tambah Kongruensi", key="add_btn"):
+        st.session_state.num_congruences += 1
+with col_btn2:
+    if st.session_state.num_congruences > 1 and st.button("➖ Kurangi Kongruensi", key="rem_btn"):
+        st.session_state.num_congruences -= 1
+
+congruences_input = []
+valid_input = True
+
+# Input per kongruensi
+for i in range(st.session_state.num_congruences):
+    st.sidebar.subheader(f"Kongruensi #{i+1}")
+    col_a, col_m = st.sidebar.columns(2)
+    
+    with col_a:
+        try:
+            a = st.number_input(f"Nilai $a_{i+1}$ (Residu)", key=f"a_{i}", value=(i+2) % (i+3), min_value=0, step=1)
+        except:
+            a = 0
+            
+    with col_m:
+        try:
+            m = st.number_input(f"Nilai $m_{i+1}$ (Modulus)", key=f"m_{i}", value=i+3, min_value=2, step=1)
+        except:
+            m = 2
+
+    # Validasi input sederhana
+    if m < 2:
+        st.sidebar.error("Modulus harus $\\ge 2$.")
+        valid_input = False
+    
+    congruences_input.append((a, m))
+
+st.divider()
+
+if st.button("Hitung Solusi Sistem", type="primary"):
+    
+    if not valid_input:
+        st.error("Perbaiki input modulus Anda sebelum melanjutkan.")
+        st.stop()
+        
+    st.subheader("📝 Sistem Kongruensi yang Diberikan")
+    
+    # Tampilkan sistem dalam format LaTeX
+    system_latex = ""
+    for a, m in congruences_input:
+        system_latex += f"$$x \\equiv {a} \\pmod{{{m}}}$$"
+    st.latex(system_latex)
+    
+    st.subheader("💡 Hasil dan Langkah Penyelesaian")
+    
+    # Panggil fungsi penyelesaian
+    final_x, final_m, steps = solve_system_crt(congruences_input)
+    
+    # Tampilkan langkah-langkah
+    for step in steps:
+        st.markdown(step)
+    
+    st.divider()
+    
+    if final_x is not None:
+        # Tampilkan solusi akhir
+        st.success(f"### 🎉 SOLUSI AKHIR DITEMUKAN!")
+        st.markdown(
+            f"""
+            Solusi unik dari sistem kongruensi ini adalah:
+            $$\\mathbf{{x \\equiv {final_x} \\pmod{{{final_m}}}}}$$
+            
+            Ini berarti bilangan bulat $x$ yang memenuhi semua kongruensi adalah $x = {final_x} + k \\cdot {final_m}$, di mana $k$ adalah bilangan bulat sembarang.
+            """
+        )
+        
+        # Tambahkan visualisasi untuk contoh bilangan bulat pertama
+        example_numbers = [final_x + k * final_m for k in range(5)]
+        st.markdown(f"Beberapa solusi bilangan bulat positif pertama: **{', '.join(map(str, example_numbers))}...**")
+        
+    else:
+        # Kasus tidak ada solusi atau CRT tidak berlaku
+        st.error("### 🚫 TIDAK ADA SOLUSI atau CRT Tidak Dapat Diterapkan Secara Langsung")
+        st.warning("Silakan periksa langkah-langkah di atas. Kegagalan terjadi karena: 1) Moduli tidak relatif prima, atau 2) Kongruensi tunggal di tengah proses tidak memiliki solusi.")
+
+st.divider()
+st.info("ℹ️ **Tentang Teorema Sisa China (CRT)**: CRT menjamin adanya solusi unik modulo perkalian semua modulus jika dan hanya jika semua modulus $\\mathbf{m_i}$ **relatif prima** satu sama lain ($\\text{GCD}(m_i, m_j) = 1$ untuk $i \\neq j$).")
+
+# Sisipkan Diagram CRT untuk visualisasi
+st.markdown("")
