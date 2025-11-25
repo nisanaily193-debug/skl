@@ -253,4 +253,5 @@ st.divider()
 st.info("ℹ️ **Tentang Teorema Sisa China (CRT)**: CRT menjamin adanya solusi unik modulo perkalian semua modulus jika dan hanya jika semua modulus $\\mathbf{m_i}$ **relatif prima** satu sama lain ($\\text{GCD}(m_i, m_j) = 1$ untuk $i \\neq j$).")
 
 # Sisipkan Diagram CRT untuk visualisasi
+
 st.markdown("")
